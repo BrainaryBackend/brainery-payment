@@ -11,15 +11,19 @@ const {
 const defaultClient = SquareConnect.ApiClient.instance;
 const crypto = require('crypto');
 const bodyParser = require('body-parser');
+const httpClient = require('http');
+const httpRequest = require('request-promise');
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 let oauth2 = defaultClient.authentications['oauth2'];
 oauth2.accessToken = process.env.ACCESS_TOKEN;
+const paypalClientId = process.env.PAYPAL_CLIENT_ID;
+const paypalSecret = process.env.PAYPAL_SECRET;
 
 defaultClient.basePath = process.env.API_BASE_PATH;
-
+const paypalBasePath = process.env.PAYPAL_BASE_PATH;
 const paymentsApi = new PaymentsApi();
 const ordersApi = new OrdersApi();
 const locationsApi = new LocationsApi();
@@ -42,7 +46,7 @@ app.post('/chargeForCookie', async (request, response) => {
         };
         const respone = await paymentsApi.createPayment(request_body);
         //const json = JSON.stringify(respone);
-        console.log(respone);
+        //console.log(JSON.parse(respone));
         response.status(200).json(respone);
     } catch (e) {
         console.log(e);
@@ -130,6 +134,92 @@ function sendErrorMessage(errors, response) {
     }
 }
 
+
+app.post('/createPaypalSubscription', async (request, response) => {
+    const requestBody = request.body;
+    // Buffer.from(paypalClientId + ':' + password).toString('base64');
+    try {
+        var accessToken = await getAccessToken();
+        var subscriptionObject = createSubscriptionObject(requestBody.planId, requestBody.subscriber, requestBody.autorenewal);
+        var options = {
+            'method': 'POST',
+            'url': paypalBasePath + '/v1/billing/subscriptions',
+            'headers': {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + accessToken
+            },
+            body: JSON.stringify(subscriptionObject)
+        }
+        httpRequest(options, function (error, jsonResponse) {
+            if (error) {
+                console.log(e);
+                response.status(500).send({
+                    errorMessage: "Error making the payment"
+                });
+            }
+            const paypmentResponse = JSON.parse(jsonResponse);
+            response.status(200).json(paypmentResponse);
+        });
+    } catch (e) {
+        console.log(e);
+        response.status(401).send({
+            errorMessage: "Error getting accessToken"
+        });
+    }
+
+});
+
+
+async function getAccessToken() {
+    const auth = Buffer.from(paypalClientId + ':' + paypalSecret).toString('base64');
+    const options = {
+        'method': 'POST',
+        'url': paypalBasePath + '/v1/oauth2/token',
+        'headers': {
+            'Authorization': 'Basic ' + auth
+        },
+        form: {
+            'grant_type': 'client_credentials'
+        }
+    };
+
+    return httpRequest(options).then((resp) => {
+        const jsonResp = JSON.parse(resp);
+        return jsonResp.access_token;
+    });
+
+}
+
+function createSubscriptionObject(planId, subscriber, autorenewal) {
+    //const startTime
+   // const amount = getPlanAmount(planId);
+    return {
+        "plan_id": planId,
+        //"start_time": startTime,
+        // "shipping_amount": {
+        //     "currency_code": "USD",
+        //     "value": amount
+        // },
+        "subscriber": subscriber,
+        "auto_renewal": autorenewal,
+        "application_context": {
+            //"brand_name": "Walmart Inc",
+            "locale": "en-US",
+            "shipping_preference": "NO_SHIPPING", // Get address from the paypal site. 
+            "user_action": "SUBSCRIBE_NOW", //Activate the subscription imeediately after payment
+            "payment_method": {
+                "payer_selected": "PAYPAL_CREDIT", //Payment method to be selected on merchant site
+                "payee_preferred": "IMMEDIATE_PAYMENT_REQUIRED" // Accept only immedeitate payment
+            },
+            "return_url": "http://zoho.com/returnUrl",
+            "cancel_url": "http://zoho.com/cancelUrl"
+        }
+    };
+}
+
+function getPlanAmount() {
+    return "5.00";
+}
 const listener = app.listen(process.env.PORT, function () {
     console.log('Your app is listening on port ' + listener.address().port);
 });
