@@ -81,14 +81,15 @@ app.get('/getsubscriptionstatus/:subscriptionId', async (request, response) => {
             if(status==="ACTIVE"){
                 subscriptionInfo['nextBillingTime'] =  paymentResponse['billing_info'].next_billing_time;
                 subscriptionInfo['access'] = true;
-            }else{
+            }else if(status==="CANCELLED"){
                 let lastPayment = paymentResponse['billing_info'].last_payment;
                 let lastPayDate = new Date(lastPayment['time']);
                 let intervalCount = getInterval(planId);
                 lastPayDate.setDate(lastPayDate.getDate()+intervalCount);
                 subscriptionInfo['nextBillingTime'] = null
-                subscriptionInfo['access'] = (lastPayDate>=new Date());
-                
+                subscriptionInfo['access'] = (lastPayDate>=new Date());   
+            }else if(status === "EXPIRED"){
+                subscriptionInfo['access'] = false;
             }
             
 
