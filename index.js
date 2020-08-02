@@ -48,6 +48,84 @@ app.post('/createPaypalSubscription', async (request, response) => {
 
 });
 
+app.get('/getsubscriptionstatus/:subscriptionId', async (request, response) => {
+    let subscriptionId = request.params.subscriptionId;
+    try{
+        var accessToken = await getAccessToken();
+        //var subscriptionObject = createSubscriptionObject(requestBody.planId, requestBody.subscriber, requestBody.autorenewal);
+        var options = {
+            'method': 'GET',
+            'url': paypalBasePath + '/v1/billing/subscriptions/'+subscriptionId,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + accessToken
+            }
+        }
+        httpRequest(options, function (error, jsonResponse) {
+            if (error) {
+                console.log(e);
+                response.status(500).send({
+                    errorMessage: "Error getting the subscription detail"
+                });
+            }
+            const paymentResponse = JSON.parse(jsonResponse.body);
+            let status = paymentResponse['status'];
+            let planId = paymentResponse['plan_id'];
+            let subscriptionInfo = {
+                "subscriptionId": subscriptionId,
+                "status": status,
+                "createdTime": paymentResponse['create_time'],
+                "planId": planId,
+                'statusUpdateOn': paymentResponse['status_update_time']
+            }
+            if(status==="ACTIVE"){
+                subscriptionInfo['nextBillingTime'] =  paymentResponse['billing_info'].next_billing_time;
+                subscriptionInfo['access'] = true;
+            }else{
+                let lastPayment = paymentResponse['billing_info'].last_payment;
+                let lastPayDate = new Date(lastPayment['time']);
+                let intervalCount = getInterval(planId);
+                lastPayDate.setDate(lastPayDate.getDate()+intervalCount);
+                subscriptionInfo['nextBillingTime'] = null
+                subscriptionInfo['access'] = (lastPayDate>=new Date());
+                
+            }
+            
+
+            response.status(200).json(subscriptionInfo);
+        });
+            //body: JSON.stringify(subscriptionObject)
+            
+    }catch(e){
+        console.log(e);
+        response.status(401).send({
+            errorMessage: "Error Fetching Subscription status"
+        });
+    }
+    //response.status(200).json({'subscriptionId': subscriptionId});
+});
+
+function getInterval(plan_id){
+    let planMap = { 
+        "P-72154846EA606791TL33WRWY": 30,
+        "P-1P139113Y18878525L4SDYAY": 1,
+        "P-1TG08431G6640442UL4SY4QA": 30
+    }
+    return planMap[plan_id];
+}
+
+async function getSubscriptionPlanInfo(planId, accessToken){
+    var options = {
+        'method': 'GET',
+        'url': paypalBasePath + '/v1/billing/plans/'+planId,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + accessToken
+        }
+    }
+
+}
+
 
 async function getAccessToken() {
     const auth = Buffer.from(paypalClientId + ':' + paypalSecret).toString('base64');
