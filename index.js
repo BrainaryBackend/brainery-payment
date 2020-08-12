@@ -50,18 +50,19 @@ app.post('/createPaypalSubscription', async (request, response) => {
 
 app.get('/getsubscriptionstatus/:subscriptionId', async (request, response) => {
     let subscriptionId = request.params.subscriptionId;
-    try{
+    try {
         var accessToken = await getAccessToken();
+
         //var subscriptionObject = createSubscriptionObject(requestBody.planId, requestBody.subscriber, requestBody.autorenewal);
         var options = {
             'method': 'GET',
-            'url': paypalBasePath + '/v1/billing/subscriptions/'+subscriptionId,
+            'url': paypalBasePath + '/v1/billing/subscriptions/' + subscriptionId,
             'headers': {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + accessToken
             }
         }
-        httpRequest(options, function (error, jsonResponse) {
+        httpRequest(options, async function (error, jsonResponse) {
             if (error) {
                 console.log(e);
                 response.status(500).send({
@@ -78,26 +79,29 @@ app.get('/getsubscriptionstatus/:subscriptionId', async (request, response) => {
                 "planId": planId,
                 'statusUpdateOn': paymentResponse['status_update_time']
             }
-            if(status==="ACTIVE"){
-                subscriptionInfo['nextBillingTime'] =  paymentResponse['billing_info'].next_billing_time;
+            if (status === "ACTIVE") {
+                subscriptionInfo['nextBillingTime'] = paymentResponse['billing_info'].next_billing_time;
                 subscriptionInfo['access'] = true;
-            }else if(status==="CANCELLED"){
+            } else if (status === "CANCELLED") {
                 let lastPayment = paymentResponse['billing_info'].last_payment;
                 let lastPayDate = new Date(lastPayment['time']);
                 let intervalCount = getInterval(planId);
-                lastPayDate.setDate(lastPayDate.getDate()+intervalCount);
+                lastPayDate.setDate(lastPayDate.getDate() + intervalCount);
                 subscriptionInfo['nextBillingTime'] = null
-                subscriptionInfo['access'] = (lastPayDate>=new Date());   
-            }else if(status === "EXPIRED"){
+                subscriptionInfo['access'] = (lastPayDate >= new Date());
+            } else if (status === "EXPIRED") {
                 subscriptionInfo['access'] = false;
             }
-            
 
+            var planInfo = await getSubscriptionPlanInfo(planId, accessToken);
+            console.log(planInfo);
+            subscriptionInfo['planName'] = planInfo['planName']
+            subscriptionInfo['planDescription'] = planInfo['planDescription']
             response.status(200).json(subscriptionInfo);
         });
-            //body: JSON.stringify(subscriptionObject)
-            
-    }catch(e){
+        //body: JSON.stringify(subscriptionObject)
+
+    } catch (e) {
         console.log(e);
         response.status(401).send({
             errorMessage: "Error Fetching Subscription status"
@@ -106,8 +110,8 @@ app.get('/getsubscriptionstatus/:subscriptionId', async (request, response) => {
     //response.status(200).json({'subscriptionId': subscriptionId});
 });
 
-function getInterval(plan_id){
-    let planMap = { 
+function getInterval(plan_id) {
+    let planMap = {
         "P-72154846EA606791TL33WRWY": 30,
         "P-1P139113Y18878525L4SDYAY": 1,
         "P-1TG08431G6640442UL4SY4QA": 30
@@ -115,15 +119,34 @@ function getInterval(plan_id){
     return planMap[plan_id];
 }
 
-async function getSubscriptionPlanInfo(planId, accessToken){
+async function getSubscriptionPlanInfo(planId, accessToken) {
     var options = {
         'method': 'GET',
-        'url': paypalBasePath + '/v1/billing/plans/'+planId,
+        'url': paypalBasePath + '/v1/billing/plans/' + planId,
         'headers': {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ' + accessToken
         }
     }
+
+    return new Promise(function (resolve, reject) {
+        httpRequest(options, function (error, jsonResponse) {
+            if (error) {
+                console.log(e);
+                resolve( {
+                    "planName": "",
+                    "planDescription": ""
+                });
+            }
+            const paymentResponse = JSON.parse(jsonResponse.body);
+            console.log("planInfo" + paymentResponse);
+            resolve( {
+                "planName": paymentResponse['name'],
+                "planDescription": paymentResponse['description']
+            });
+        });
+    });
+
 
 }
 
