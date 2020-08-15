@@ -110,6 +110,40 @@ app.get('/getsubscriptionstatus/:subscriptionId', async (request, response) => {
     //response.status(200).json({'subscriptionId': subscriptionId});
 });
 
+app.get('/cancelsubscription/:subscriptionId', async (request, response) => {
+    let subscriptionId = request.params.subscriptionId;
+    try {
+        var accessToken = await getAccessToken();
+
+        var reasonForCancel = {	"reason": "Subscription cancelled from the App by user"};
+        var options = {
+            'method': 'POST',
+            'url': paypalBasePath + '/v1/billing/subscriptions/' + subscriptionId+'/cancel',
+            'headers': {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + accessToken
+            },
+            body: JSON.stringify(reasonForCancel)
+        }
+        httpRequest(options, async function (error, jsonResponse) {
+            if (error) {
+                console.log(e);
+                response.status(500).send({
+                    errorMessage: "Error Cancelling the subscription detail"
+                });
+            }
+            response.status(200).json({"response": "success"});
+        });
+        //body: JSON.stringify(subscriptionObject)
+
+    } catch (e) {
+        console.log(e);
+        response.status(401).send({
+            errorMessage: "Error Fetching Subscription status"
+        });
+    }
+});
+
 function getInterval(plan_id) {
     let planMap = {
         "P-72154846EA606791TL33WRWY": 30,
